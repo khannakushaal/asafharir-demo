@@ -1496,5 +1496,68 @@ function initMap(){
 window.addEventListener('resize',function(){ if(_map) _map.invalidateSize(); });
 setMode('app');
 </script>
+<script>
+/* ===== Nearbid prototype · event tracker (lands + every click → Google Sheet) ===== */
+(function(){
+  // 1) Paste your Apps Script Web app URL here (ends with /exec). Leave "" to disable.
+  var TRACK_URL = "https://script.google.com/macros/s/AKfycbysF7Wx1rDGMvkfGiQHmVHHBPrEois1WI3SXTV-HDaAkXh5h-WfzkZshnv_C9QMkfH5/exec";
+
+  if(!TRACK_URL){ console.info("[Nearbid tracker] TRACK_URL not set — logging disabled."); }
+
+  var session = (Math.random().toString(36).slice(2,8) + Date.now().toString(36)).toUpperCase();
+  var tz = (function(){ try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch(e){ return ""; } })();
+  var device = (function(){
+    var ua = navigator.userAgent || "";
+    if (/iPad|Tablet|PlayBook|Silk|(Android(?!.*Mobile))/i.test(ua)) return "Tablet";
+    if (/Mobi|iPhone|iPod|Android.*Mobile|Windows Phone|BlackBerry|Opera Mini/i.test(ua)) return "Mobile";
+    return "Desktop";
+  })();
+
+  function screenName(){
+    var s = document.querySelector('.screen.active');
+    return s ? (s.id ? s.id.replace(/^s-/,'') : 'screen') : (location.hash ? location.hash.slice(1) : 'app');
+  }
+  function send(event, detail){
+    if(!TRACK_URL) return;
+    var payload = {
+      session: session, event: event, detail: detail || "",
+      screen: screenName(),
+      clientTime: new Date().toISOString(),
+      tz: tz, device: device,
+      screenSize: (window.screen ? (screen.width + "x" + screen.height) : ""),
+      lang: navigator.language || "",
+      ua: navigator.userAgent || ""
+    };
+    try {
+      var body = JSON.stringify(payload);
+      if (navigator.sendBeacon){
+        navigator.sendBeacon(TRACK_URL, new Blob([body], {type:"text/plain;charset=utf-8"}));
+      } else {
+        fetch(TRACK_URL, {method:"POST", mode:"no-cors", keepalive:true,
+          headers:{"Content-Type":"text/plain;charset=utf-8"}, body: body});
+      }
+    } catch(e){}
+  }
+
+  // 1) Landed on the prototype
+  send("Landed", document.title);
+
+  // 2) Every meaningful click — capture a friendly label + the screen it happened on
+  document.addEventListener("click", function(ev){
+    var el = ev.target.closest(
+      "button, a, [onclick], .tab, .btn, .card, .chip, .pill, .nav, .fab, input, [role='button'], li"
+    );
+    if (!el) return;
+    var label = (el.getAttribute("aria-label") || el.textContent || el.value || el.title || "").replace(/\s+/g," ").trim();
+    if (label.length > 70) label = label.slice(0,70) + "…";
+    if (!label) label = (el.className || el.tagName || "").toString().split(" ")[0] || "element";
+    send("Click", label);
+  }, true);
+
+  // 3) Leaving the prototype
+  window.addEventListener("pagehide", function(){ send("Left prototype", ""); });
+})();
+</script>
+
 </body>
 </html>
